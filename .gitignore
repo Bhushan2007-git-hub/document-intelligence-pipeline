@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.env
+models/saved/
+data/dataset.json
+{src

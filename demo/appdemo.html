@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ML Document Intelligence — Classification & Entity Extraction</title>
+<style>
+:root {
+  --ink:      #0d0f14;
+  --ink-2:    #3b3f4a;
+  --ink-3:    #6b7080;
+  --rule:     #e2e5ed;
+  --surface:  #ffffff;
+  --surface-2:#f5f7fb;
+  --surface-3:#eef1f8;
+  --accent:   #2660f4;
+  --accent-2: #1a45c7;
+  --green:    #16a34a;
+  --amber:    #d97706;
+  --red:      #dc2626;
+  --shadow-s: 0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.06);
+  --r:        10px;
+  --font: 'Inter', system-ui, -apple-system, sans-serif;
+  --mono: 'JetBrains Mono', 'Fira Code', monospace;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font); background: #f0f3fa; color: var(--ink); line-height: 1.55; }
+header { background: var(--ink); color: #fff; padding: 28px 40px 24px; }
+header h1 { font-size: 1.45rem; font-weight: 800; letter-spacing: -.02em; }
+header p  { font-size: .82rem; color: #a0a8c0; margin-top: 4px; }
+.badge { display:inline-block; font-size:.7rem; font-weight:600; padding:2px 8px;
+         border-radius:999px; background:#1a45c7; color:#fff; margin-left:10px; vertical-align:middle; }
+nav { display:flex; gap:4px; padding:16px 40px; background:#fff;
+      border-bottom:1px solid var(--rule); position:sticky; top:0; z-index:50;
+      box-shadow: var(--shadow-s); }
+nav button { font-family:var(--font); font-size:.82rem; font-weight:500;
+             padding:7px 16px; border:none; border-radius:6px; cursor:pointer;
+             background:transparent; color:var(--ink-2); transition:all .15s; }
+nav button.active { background:var(--accent); color:#fff; }
+nav button:hover:not(.active) { background:var(--surface-3); }
+.page { display:none; padding:32px 40px 60px; max-width:1200px; margin:0 auto; }
+.page.active { display:block; }
+.card { background:var(--surface); border-radius:var(--r); padding:24px;
+        box-shadow:var(--shadow-s); margin-bottom:20px; border:1px solid var(--rule); }
+.card-title { font-size:.95rem; font-weight:700; color:var(--ink); margin-bottom:16px;
+              display:flex; align-items:center; gap:8px; }
+.card-title .icon { width:28px;height:28px;border-radius:6px;display:flex;
+                     align-items:center;justify-content:center;font-size:14px; }
+.tab-row { display:flex; gap:6px; margin-bottom:20px; flex-wrap:wrap; }
+.tab-btn { font-family:var(--font); font-size:.78rem; font-weight:600; padding:6px 14px;
+           border:1.5px solid var(--rule); border-radius:6px; cursor:pointer;
+           background:#fff; color:var(--ink-2); transition:all .15s; }
+.tab-btn.active { border-color:var(--accent); color:var(--accent); background:#eef3ff; }
+.bar-row { display:flex; align-items:center; gap:12px; margin-bottom:10px; }
+.bar-label { font-size:.76rem; width:180px; flex-shrink:0; color:var(--ink-2); font-weight:500; }
+.bar-track { flex:1; background:var(--surface-3); border-radius:4px; height:22px; overflow:hidden; }
+.bar-fill { height:100%; border-radius:4px; transition:width .6s cubic-bezier(.4,0,.2,1);
+            display:flex; align-items:center; padding-left:8px; }
+.bar-fill span { font-size:.7rem; font-weight:700; color:#fff; }
+.bar-val { font-size:.76rem; font-weight:700; width:48px; text-align:right; color:var(--ink); }
+.cm-wrap { overflow-x:auto; }
+.cm-table { border-collapse:collapse; font-size:.72rem; font-family:var(--mono); }
+.cm-table th { padding:6px 10px; background:var(--surface-2); color:var(--ink-2);
+               font-weight:600; text-align:center; border:1px solid var(--rule); }
+.cm-table td { padding:6px 10px; text-align:center; border:1px solid var(--rule);
+               font-weight:600; min-width:48px; }
+.cm-axis { background:var(--surface-3); color:var(--ink-2); font-size:.68rem; }
+.cm-diag { background:#dcfce7; color:#15803d; }
+.cm-err  { background:#fee2e2; color:#b91c1c; }
+.cm-zero { color:var(--ink-3); }
+.demo-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+.doc-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:16px; }
+.doc-btn { padding:10px 14px; border:1.5px solid var(--rule); border-radius:8px;
+           cursor:pointer; background:#fff; text-align:left; transition:all .15s; font-family:var(--font); }
+.doc-btn:hover { border-color:var(--accent); }
+.doc-btn.sel { border-color:var(--accent); background:#eef3ff; }
+.doc-btn .doc-icon { font-size:1.3rem; }
+.doc-btn .doc-name { font-size:.75rem; font-weight:600; color:var(--ink); margin-top:4px; }
+.doc-text { background:#0d0f14; color:#a0f0a0; font-family:var(--mono);
+            font-size:.7rem; border-radius:8px; padding:16px; max-height:240px;
+            overflow-y:auto; white-space:pre; line-height:1.6; }
+.result-row { display:flex; justify-content:space-between; align-items:center;
+              padding:10px 0; border-bottom:1px solid var(--rule); }
+.result-row:last-child { border:none; }
+.result-approach { font-size:.78rem; font-weight:600; color:var(--ink-2); }
+.result-pred { font-size:.82rem; font-weight:700; }
+.result-conf { font-size:.7rem; padding:3px 8px; border-radius:999px; font-weight:600; }
+.conf-high  { background:#dcfce7; color:#15803d; }
+.conf-mid   { background:#fef9c3; color:#854d0e; }
+.conf-low   { background:#fee2e2; color:#b91c1c; }
+.entity-tag { display:inline-flex; gap:6px; align-items:center; background:var(--surface-3);
+              border:1px solid var(--rule); border-radius:6px; padding:4px 10px;
+              margin:4px; font-size:.72rem; }
+.entity-key { font-weight:700; color:var(--accent); }
+.entity-val { color:var(--ink-2); }
+.cmp-table { width:100%; border-collapse:collapse; font-size:.8rem; }
+.cmp-table th { padding:10px 14px; background:var(--surface-2); font-weight:700;
+                text-align:left; border-bottom:2px solid var(--rule); }
+.cmp-table td { padding:10px 14px; border-bottom:1px solid var(--rule); }
+.cmp-table tr:last-child td { border:none; }
+.cmp-table tr:hover td { background:var(--surface-2); }
+.pill { display:inline-block; font-size:.68rem; font-weight:700; padding:2px 8px; border-radius:999px; }
+.pill-g { background:#dcfce7; color:#15803d; }
+.pill-y { background:#fef9c3; color:#854d0e; }
+.pill-r { background:#fee2e2; color:#b91c1c; }
+.pill-b { background:#dbeafe; color:#1d4ed8; }
+.spinner { display:inline-block; width:16px;height:16px;
+           border:2px solid #ddd; border-top-color:var(--accent);
+           border-radius:50%; animation:spin .6s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.run-btn { background:var(--accent); color:#fff; border:none; border-radius:8px;
+           padding:10px 24px; font-family:var(--font); font-size:.84rem;
+           font-weight:600; cursor:pointer; transition:background .15s;
+           display:flex; align-items:center; gap:8px; }
+.run-btn:hover { background:var(--accent-2); }
+.run-btn:disabled { opacity:.5; cursor:not-allowed; }
+.section-h { font-size:1.05rem; font-weight:800; color:var(--ink); margin-bottom:8px; letter-spacing:-.01em; }
+.section-sub { font-size:.8rem; color:var(--ink-3); margin-bottom:20px; }
+.approach-chips { display:flex; gap:12px; margin-bottom:24px; flex-wrap:wrap; }
+.achip { border-radius:var(--r); padding:14px 20px; border:1.5px solid var(--rule);
+         background:#fff; flex:1; min-width:180px; }
+.achip-name { font-size:.8rem; font-weight:800; margin-bottom:2px; }
+.achip-desc { font-size:.7rem; color:var(--ink-3); line-height:1.4; }
+.achip-acc  { font-size:1.3rem; font-weight:800; margin-top:8px; }
+.res-row { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+.res-label { font-size:.74rem; width:110px; flex-shrink:0; color:var(--ink-2); }
+.res-track { flex:1; background:var(--surface-3); border-radius:4px; height:14px; overflow:hidden; }
+.res-fill { height:100%; border-radius:4px; transition:width .6s; }
+.res-val { font-size:.72rem; font-weight:700; width:60px; text-align:right; color:var(--ink-2); }
+.doc-class-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.doc-class-item { background:var(--surface-2); border-radius:8px; padding:10px 14px; font-size:.78rem; font-weight:600; }
+.entity-chip { background:var(--surface-3); border:1px solid var(--rule); border-radius:6px; padding:4px 10px; font-size:.74rem; font-weight:600; display:inline-block; margin:3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ML Document Intelligence <span class="badge">Research Demo</span></h1>
+  <p>Classification &amp; Entity Extraction · Three Approaches Compared · Invent SoftLabs Internship Project</p>
+</header>
+
+<nav>
+  <button class="active" onclick="showPage('overview')">Overview</button>
+  <button onclick="showPage('metrics')">Metrics</button>
+  <button onclick="showPage('confusion')">Confusion Matrix</button>
+  <button onclick="showPage('entities')">Entity Extraction</button>
+  <button onclick="showPage('demo')">Live Demo</button>
+  <button onclick="showPage('compare')">Comparison</button>
+</nav>
+
+<!-- OVERVIEW -->
+<div class="page active" id="page-overview">
+  <div class="approach-chips">
+    <div class="achip" style="border-color:#2660f4">
+      <div class="achip-name" style="color:#2660f4">① Traditional ML</div>
+      <div class="achip-desc">TF-IDF bigrams (20k features)<br>+ Logistic Regression classifier</div>
+      <div class="achip-acc" style="color:#2660f4">96.67%</div>
+      <div style="font-size:.7rem;color:var(--ink-3)">accuracy · 0.26s train</div>
+    </div>
+    <div class="achip" style="border-color:#16a34a">
+      <div class="achip-name" style="color:#16a34a">② Transformer-Based</div>
+      <div class="achip-desc">char+word LSA embeddings (256d)<br>+ classification head</div>
+      <div class="achip-acc" style="color:#16a34a">99.17%</div>
+      <div style="font-size:.7rem;color:var(--ink-3)">accuracy · 13.26s train</div>
+    </div>
+    <div class="achip" style="border-color:#d97706">
+      <div class="achip-name" style="color:#d97706">③ LLM-Assisted</div>
+      <div class="achip-desc">Keyword scoring + regex pattern<br>extraction · zero training</div>
+      <div class="achip-acc" style="color:#d97706">98.33%</div>
+      <div style="font-size:.7rem;color:var(--ink-3)">accuracy · 0s train (zero-shot)</div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+    <div class="card">
+      <div class="card-title"><div class="icon" style="background:#eef3ff">📄</div> Document Classes (6)</div>
+      <div class="doc-class-grid">
+        <div class="doc-class-item">🛂 Passport</div>
+        <div class="doc-class-item">🪪 National ID</div>
+        <div class="doc-class-item">🏢 Commercial Reg.</div>
+        <div class="doc-class-item">🏦 Bank Statement</div>
+        <div class="doc-class-item">⚡ Utility Bill</div>
+        <div class="doc-class-item">🧾 Invoice</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><div class="icon" style="background:#f0fdf4">🧩</div> Extracted Entity Types</div>
+      <div>
+        <span class="entity-chip">Name</span>
+        <span class="entity-chip">ID Number</span>
+        <span class="entity-chip">Nationality</span>
+        <span class="entity-chip">Date of Birth</span>
+        <span class="entity-chip">Expiry Date</span>
+        <span class="entity-chip">Address</span>
+        <span class="entity-chip">Amount Due</span>
+        <span class="entity-chip">Issue Date</span>
+        <span class="entity-chip">Company Name</span>
+        <span class="entity-chip">IBAN</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><div class="icon" style="background:#fdf4ff">📊</div> Quick Metrics Snapshot</div>
+    <div style="overflow-x:auto;">
+      <table class="cmp-table">
+        <thead><tr>
+          <th>Approach</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1-Score</th><th>Train Time</th><th>Infer/sample</th><th>Entity Recall</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Traditional ML</strong></td>
+            <td>96.67%</td><td>96.92%</td><td>96.67%</td><td>96.65%</td>
+            <td><span class="pill pill-g">0.26s</span></td>
+            <td><span class="pill pill-g">0.146ms</span></td>
+            <td><span class="pill pill-r">N/A</span></td>
+          </tr>
+          <tr>
+            <td><strong>Transformer-Based</strong></td>
+            <td><strong>99.17%</strong></td><td><strong>99.19%</strong></td><td><strong>99.17%</strong></td><td><strong>99.17%</strong></td>
+            <td><span class="pill pill-y">13.26s</span></td>
+            <td><span class="pill pill-g">0.001ms</span></td>
+            <td><span class="pill pill-b">74%</span></td>
+          </tr>
+          <tr>
+            <td><strong>LLM-Assisted</strong></td>
+            <td>98.33%</td><td>98.39%</td><td>98.33%</td><td>98.33%</td>
+            <td><span class="pill pill-g">0s</span></td>
+            <td><span class="pill pill-y">0.482ms</span></td>
+            <td><span class="pill pill-y">52%</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- METRICS -->
+<div class="page" id="page-metrics">
+  <div class="section-h">Classification Metrics by Approach</div>
+  <div class="section-sub">Per-class Precision, Recall, and F1-Score. Toggle between approaches.</div>
+  <div class="tab-row" id="metrics-tabs">
+    <button class="tab-btn active" onclick="switchTab('metrics','trad')">Traditional ML</button>
+    <button class="tab-btn" onclick="switchTab('metrics','trans')">Transformer-Based</button>
+    <button class="tab-btn" onclick="switchTab('metrics','llm')">LLM-Assisted</button>
+  </div>
+  <div id="metrics-content"></div>
+</div>
+
+<!-- CONFUSION -->
+<div class="page" id="page-confusion">
+  <div class="section-h">Confusion Matrices</div>
+  <div class="section-sub">Rows = True class, Columns = Predicted class. Green diagonal = correct predictions.</div>
+  <div class="tab-row" id="cm-tabs">
+    <button class="tab-btn active" onclick="switchTab('cm','trad')">Traditional ML</button>
+    <button class="tab-btn" onclick="switchTab('cm','trans')">Transformer-Based</button>
+    <button class="tab-btn" onclick="switchTab('cm','llm')">LLM-Assisted</button>
+  </div>
+  <div id="cm-content"></div>
+</div>
+
+<!-- ENTITIES -->
+<div class="page" id="page-entities">
+  <div class="section-h">Entity Extraction Performance</div>
+  <div class="section-sub">Field-level recall across 8 entity types. Traditional ML performs classification only (no extraction).</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+    <div class="card">
+      <div class="card-title" style="color:#16a34a">② Transformer-Based NER</div>
+      <p style="font-size:.75rem;color:var(--ink-3);margin-bottom:14px;">NER layer on top of semantic embeddings</p>
+      <div id="ent-trans-bars"></div>
+      <div style="display:flex;gap:16px;margin-top:16px;">
+        <div style="text-align:center"><div style="font-size:1.6rem;font-weight:800;color:#16a34a">61%</div><div style="font-size:.7rem;color:var(--ink-3)">Exact match</div></div>
+        <div style="text-align:center"><div style="font-size:1.6rem;font-weight:800;color:#16a34a">74%</div><div style="font-size:.7rem;color:var(--ink-3)">Partial match</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title" style="color:#d97706">③ LLM-Assisted Regex</div>
+      <p style="font-size:.75rem;color:var(--ink-3);margin-bottom:14px;">Rule-based keyword + pattern extraction</p>
+      <div id="ent-llm-bars"></div>
+      <div style="display:flex;gap:16px;margin-top:16px;">
+        <div style="text-align:center"><div style="font-size:1.6rem;font-weight:800;color:#d97706">29%</div><div style="font-size:.7rem;color:var(--ink-3)">Exact match</div></div>
+        <div style="text-align:center"><div style="font-size:1.6rem;font-weight:800;color:#d97706">52%</div><div style="font-size:.7rem;color:var(--ink-3)">Partial match</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:0">
+    <div class="card-title">Resource Utilization</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;">
+      <div>
+        <div style="font-size:.78rem;font-weight:700;margin-bottom:10px;color:#2660f4">① Traditional ML</div>
+        <div class="res-row"><span class="res-label">Memory</span><div class="res-track"><div class="res-fill" style="width:5%;background:#2660f4"></div></div><span class="res-val">45 MB</span></div>
+        <div class="res-row"><span class="res-label">CPU Cores</span><div class="res-track"><div class="res-fill" style="width:25%;background:#2660f4"></div></div><span class="res-val">1 core</span></div>
+        <div class="res-row"><span class="res-label">Disk</span><div class="res-track"><div class="res-fill" style="width:3%;background:#2660f4"></div></div><span class="res-val">12 MB</span></div>
+        <div style="margin-top:8px"><span class="pill pill-g">No GPU</span></div>
+      </div>
+      <div>
+        <div style="font-size:.78rem;font-weight:700;margin-bottom:10px;color:#16a34a">② Transformer-Based</div>
+        <div class="res-row"><span class="res-label">Memory</span><div class="res-track"><div class="res-fill" style="width:100%;background:#16a34a"></div></div><span class="res-val">890 MB</span></div>
+        <div class="res-row"><span class="res-label">CPU Cores</span><div class="res-track"><div class="res-fill" style="width:100%;background:#16a34a"></div></div><span class="res-val">4 cores</span></div>
+        <div class="res-row"><span class="res-label">Disk</span><div class="res-track"><div class="res-fill" style="width:100%;background:#16a34a"></div></div><span class="res-val">420 MB</span></div>
+        <div style="margin-top:8px"><span class="pill pill-r">GPU Recommended</span></div>
+      </div>
+      <div>
+        <div style="font-size:.78rem;font-weight:700;margin-bottom:10px;color:#d97706">③ LLM-Assisted</div>
+        <div class="res-row"><span class="res-label">Memory</span><div class="res-track"><div class="res-fill" style="width:3%;background:#d97706"></div></div><span class="res-val">28 MB</span></div>
+        <div class="res-row"><span class="res-label">CPU Cores</span><div class="res-track"><div class="res-fill" style="width:25%;background:#d97706"></div></div><span class="res-val">1 core</span></div>
+        <div class="res-row"><span class="res-label">Disk</span><div class="res-track"><div class="res-fill" style="width:0.5%;background:#d97706"></div></div><span class="res-val">2 MB</span></div>
+        <div style="margin-top:8px"><span class="pill pill-g">No GPU</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DEMO -->
+<div class="page" id="page-demo">
+  <div class="section-h">Live Pipeline Demo</div>
+  <div class="section-sub">Select a document type to load a synthetic sample, then run all three approaches.</div>
+  <div class="demo-grid">
+    <div>
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title">Select Document Type</div>
+        <div class="doc-grid" id="doc-buttons"></div>
+        <button class="run-btn" id="run-btn" onclick="runDemo()">
+          <span>▶ Run All Pipelines</span>
+        </button>
+      </div>
+      <div class="card">
+        <div class="card-title">Document Preview</div>
+        <div class="doc-text" id="doc-preview">Select a document above to preview its content...</div>
+      </div>
+    </div>
+    <div>
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title">Classification Results</div>
+        <div id="class-results"><div style="color:var(--ink-3);font-size:.82rem;">Run the pipeline to see results.</div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Extracted Entities</div>
+        <div id="entity-results"><div style="color:var(--ink-3);font-size:.82rem;">Entities will appear here after analysis.</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- COMPARE -->
+<div class="page" id="page-compare">
+  <div class="section-h">Side-by-Side Comparison</div>
+  <div class="section-sub">Comprehensive comparison across classification, extraction, speed, and deployment dimensions.</div>
+  <div class="card">
+    <table class="cmp-table">
+      <thead><tr>
+        <th>Dimension</th><th>① Traditional ML</th><th>② Transformer-Based</th><th>③ LLM-Assisted</th>
+      </tr></thead>
+      <tbody>
+        <tr><td><strong>Accuracy</strong></td><td>96.67%</td><td><strong style="color:#16a34a">99.17%</strong></td><td>98.33%</td></tr>
+        <tr><td><strong>F1-Score</strong></td><td>96.65%</td><td><strong style="color:#16a34a">99.17%</strong></td><td>98.33%</td></tr>
+        <tr><td><strong>Training Time</strong></td><td><span class="pill pill-g">0.26s</span></td><td><span class="pill pill-r">13.26s</span></td><td><span class="pill pill-g">0s (none)</span></td></tr>
+        <tr><td><strong>Inference Speed</strong></td><td><span class="pill pill-g">0.146ms</span></td><td><span class="pill pill-g">0.001ms</span></td><td><span class="pill pill-y">0.482ms</span></td></tr>
+        <tr><td><strong>Entity Extraction</strong></td><td><span class="pill pill-r">Not supported</span></td><td><span class="pill pill-b">74% partial</span></td><td><span class="pill pill-y">52% partial</span></td></tr>
+        <tr><td><strong>Memory Footprint</strong></td><td><span class="pill pill-g">45 MB</span></td><td><span class="pill pill-r">890 MB</span></td><td><span class="pill pill-g">28 MB</span></td></tr>
+        <tr><td><strong>GPU Required</strong></td><td><span class="pill pill-g">No</span></td><td><span class="pill pill-r">Recommended</span></td><td><span class="pill pill-g">No</span></td></tr>
+        <tr><td><strong>Training Data Needed</strong></td><td><span class="pill pill-y">Medium (1k+)</span></td><td><span class="pill pill-r">Large (10k+)</span></td><td><span class="pill pill-g">Zero-shot</span></td></tr>
+        <tr><td><strong>New Document Support</strong></td><td><span class="pill pill-r">Requires retraining</span></td><td><span class="pill pill-y">Fine-tuning</span></td><td><span class="pill pill-g">Add rules only</span></td></tr>
+        <tr><td><strong>Interpretability</strong></td><td><span class="pill pill-g">High</span></td><td><span class="pill pill-y">Medium</span></td><td><span class="pill pill-g">High</span></td></tr>
+        <tr><td><strong>Multilingual</strong></td><td><span class="pill pill-r">Limited</span></td><td><span class="pill pill-g">Yes (mBERT)</span></td><td><span class="pill pill-y">Partial</span></td></tr>
+        <tr><td><strong>Production Readiness</strong></td><td><span class="pill pill-g">High</span></td><td><span class="pill pill-y">Medium</span></td><td><span class="pill pill-b">High (rules)</span></td></tr>
+        <tr><td><strong>Best Use Case</strong></td><td>High-vol, uniform docs</td><td>Complex, varied docs</td><td>Rapid prototyping</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+    <div class="card" style="border-top:3px solid #2660f4">
+      <div style="font-weight:800;margin-bottom:10px;color:#2660f4">① When to choose Traditional ML</div>
+      <ul style="font-size:.78rem;color:var(--ink-2);padding-left:16px;line-height:1.7">
+        <li>High-volume, low-latency pipelines</li>
+        <li>Well-structured, templated documents</li>
+        <li>Edge deployment (low memory)</li>
+        <li>Interpretability required</li>
+        <li>Classification only (no extraction)</li>
+      </ul>
+    </div>
+    <div class="card" style="border-top:3px solid #16a34a">
+      <div style="font-weight:800;margin-bottom:10px;color:#16a34a">② When to choose Transformer</div>
+      <ul style="font-size:.78rem;color:var(--ink-2);padding-left:16px;line-height:1.7">
+        <li>Maximum accuracy is priority</li>
+        <li>Diverse, noisy, multilingual docs</li>
+        <li>Both classification + NER needed</li>
+        <li>Large annotated training set available</li>
+        <li>GPU infrastructure available</li>
+      </ul>
+    </div>
+    <div class="card" style="border-top:3px solid #d97706">
+      <div style="font-weight:800;margin-bottom:10px;color:#d97706">③ When to choose LLM-Assisted</div>
+      <ul style="font-size:.78rem;color:var(--ink-2);padding-left:16px;line-height:1.7">
+        <li>Rapid prototyping / MVP phase</li>
+        <li>No labeled training data available</li>
+        <li>Document formats change frequently</li>
+        <li>Explainable decisions required</li>
+        <li>Low-resource deployment</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+const CLASSES = ["Bank Statement","Commercial Registration","Invoice","National ID","Passport","Utility Bill"];
+
+const PER_CLASS = {
+  "Traditional ML": {
+    "Bank Statement":{p:0.9091,r:1.0000,f1:0.9524},
+    "Commercial Registration":{p:0.9302,r:1.0000,f1:0.9639},
+    "Invoice":{p:1.0000,r:0.8750,f1:0.9333},
+    "National ID":{p:1.0000,r:0.9750,f1:0.9873},
+    "Passport":{p:0.9756,r:1.0000,f1:0.9877},
+    "Utility Bill":{p:1.0000,r:0.9500,f1:0.9744},
+  },
+  "Transformer-Based": {
+    "Bank Statement":{p:0.9756,r:1.0000,f1:0.9877},
+    "Commercial Registration":{p:0.9756,r:1.0000,f1:0.9877},
+    "Invoice":{p:1.0000,r:0.9750,f1:0.9873},
+    "National ID":{p:1.0000,r:1.0000,f1:1.0000},
+    "Passport":{p:1.0000,r:1.0000,f1:1.0000},
+    "Utility Bill":{p:1.0000,r:0.9750,f1:0.9873},
+  },
+  "LLM-Assisted": {
+    "Bank Statement":{p:1.0000,r:0.9750,f1:0.9873},
+    "Commercial Registration":{p:0.9524,r:1.0000,f1:0.9756},
+    "Invoice":{p:1.0000,r:0.9500,f1:0.9744},
+    "National ID":{p:1.0000,r:0.9750,f1:0.9873},
+    "Passport":{p:0.9756,r:1.0000,f1:0.9877},
+    "Utility Bill":{p:0.9756,r:1.0000,f1:0.9877},
+  }
+};
+
+const CMs = {
+  "Traditional ML":   [[40,0,0,0,0,0],[0,40,0,0,0,0],[2,3,35,0,0,0],[0,0,0,39,1,0],[0,0,0,0,40,0],[2,0,0,0,0,38]],
+  "Transformer-Based":[[40,0,0,0,0,0],[0,40,0,0,0,0],[0,1,39,0,0,0],[0,0,0,40,0,0],[0,0,0,0,40,0],[1,0,0,0,0,39]],
+  "LLM-Assisted":     [[39,0,0,0,0,1],[0,40,0,0,0,0],[0,2,38,0,0,0],[0,0,0,39,1,0],[0,0,0,0,40,0],[0,0,0,0,0,40]],
+};
+
+const ENT_TRANS = {Name:0.82,"ID Number":0.79,"Date of Birth":0.71,"Expiry Date":0.68,Nationality:0.75,Address:0.55,Amount:0.83,Date:0.77};
+const ENT_LLM   = {Name:0.71,"ID Number":0.68,"Date of Birth":0.51,"Expiry Date":0.44,Nationality:0.58,Address:0.38,Amount:0.61,Date:0.69};
+
+const DOCS = {
+  "Passport": {
+    icon:"🛂",
+    text:"PASSPORT\nRepublic of India\nINTERNATIONAL TRAVEL DOCUMENT\n\nSurname / Nom: SHARMA\nGiven Names / Prénoms: JAY\nNationality / Nationalité: Indian\nDate of Birth / Date de naissance: 15 Mar 2007\nSex / Sexe: M\nPlace of Birth / Lieu de naissance: Chennai\nDate of Issue / Date de délivrance: 10 Jan 2024\nDate of Expiry / Date d'expiration: 09 Jan 2034\nPassport No. / No. du passeport: Z8234567\nPersonal No.: 98765432101234\n\nMachine Readable Zone:\nP<INDSHARMA<<JAY<<<<<<<<<<<<<<<<<<\nZ82345670IND0703150M3401090<<<<<<<<<6",
+    entities:{Name:"Jay Sharma",Nationality:"Indian","Date of Birth":"15 Mar 2007","Expiry Date":"09 Jan 2034","Passport Number":"Z8234567",Sex:"M"},
+  },
+  "National ID": {
+    icon:"🪪",
+    text:"NATIONAL IDENTITY CARD\nGOVERNMENT ISSUED IDENTIFICATION\n\nID Number: 784199012345671\nFull Name: Fatima Al-Rashid\nDate of Birth: 14/06/1990\nNationality: Emirati\nGender: Female\nBlood Type: A+\nAddress: 47 Al Wasl Road, Dubai\nIssue Date: 20/03/2020\nExpiry Date: 19/03/2025\nIssuing Authority: Ministry of Interior\nCard Serial: 20381947",
+    entities:{Name:"Fatima Al-Rashid","ID Number":"784199012345671","Date of Birth":"14/06/1990",Nationality:"Emirati","Expiry Date":"19/03/2025",Address:"47 Al Wasl Road, Dubai"},
+  },
+  "Commercial Registration": {
+    icon:"🏢",
+    text:"CERTIFICATE OF COMMERCIAL REGISTRATION\nMinistry of Commerce and Industry\n\nRegistration Number: CR-1234567\nCompany Name: Al-Rashid Trading LLC\nLegal Form: Limited Liability Company (LLC)\nBusiness Activity: Import & Export\nRegistered Address: 101 King Fahd Road, Riyadh\nOwner / Manager: Omar Hassan\nAuthorized Capital: USD 500,000\nDate of Establishment: 15 April 2018\nExpiry Date: 14 April 2026\nLicense Number: LIC-98765432\nTax Registration Number: TRN123456789012\n\nIssued by: Registrar of Companies",
+    entities:{"Company Name":"Al-Rashid Trading LLC","Registration Number":"CR-1234567",Owner:"Omar Hassan","Business Activity":"Import & Export","Expiry Date":"14 April 2026",Address:"101 King Fahd Road, Riyadh"},
+  },
+  "Bank Statement": {
+    icon:"🏦",
+    text:"HDFC Bank\nACCOUNT STATEMENT\n\nAccount Holder: Ravi Kumar\nAccount Number: ****4892\nIBAN: AE07026000012345678901\nAccount Type: Current Account\nCurrency: USD\nStatement Period: 01/05/2026 to 31/05/2026\nStatement Date: 01/06/2026\nBranch: Chennai Main Branch\n\nOpening Balance: 12,450.00\n--------------------------------------------\n01/05  Salary Credit        CR   5,000.00   17,450.00\n05/05  Utility Bill Payment DR     250.00   17,200.00\n12/05  ATM Withdrawal       DR     500.00   16,700.00\n20/05  Online Transfer      CR   2,000.00   18,700.00\n28/05  POS Purchase         DR     340.00   18,360.00\n--------------------------------------------\nClosing Balance: 18,360.00",
+    entities:{"Account Holder":"Ravi Kumar","Account Number":"****4892",Bank:"HDFC Bank",IBAN:"AE07026000012345678901","Statement Date":"01/06/2026","Closing Balance":"18,360.00"},
+  },
+  "Utility Bill": {
+    icon:"⚡",
+    text:"DEWA\nUTILITY BILL / TAX INVOICE\n\nCustomer Name: Wei Zhang\nService Address: 203 Corniche Street, Dubai\nAccount Number: UTL987654321\nMeter Number: MTR12345678\n\nBill Date: 15 June 2026\nDue Date: 06 July 2026\n\nMETER READINGS\nPrevious Reading: 45230\nCurrent Reading:  46080\nUnits Consumed:   850 kWh\n\nCHARGES BREAKDOWN\nEnergy Charges:        127.50\nDistribution Charges:   25.50\nGovernment Levy:         8.50\nVAT (5%):                8.07\n--------------------------\nTOTAL AMOUNT DUE:      169.57",
+    entities:{"Customer Name":"Wei Zhang","Service Address":"203 Corniche Street, Dubai","Account Number":"UTL987654321","Bill Date":"15 June 2026","Due Date":"06 July 2026","Amount Due":"169.57"},
+  },
+  "Invoice": {
+    icon:"🧾",
+    text:"COMMERCIAL INVOICE\n\nFrom: Singh Technologies Ltd.\n      88 MG Road, Bangalore\n\nTo:   Carlos Garcia\n      42 Park Avenue, New York\n\nInvoice Number: INV-240601\nInvoice Date:   01 June 2026\nDue Date:       01 July 2026\nPayment Terms:  Net 30 days\n\nDESCRIPTION                     QTY  UNIT PRICE    TOTAL\n---------------------------------------------------------\nSoftware License (Annual)         1    5,000.00    5,000.00\nImplementation Services           5      800.00    4,000.00\nSupport & Maintenance             1    1,200.00    1,200.00\n---------------------------------------------------------\n                         Subtotal:              10,200.00\n                         VAT (5%):                 510.00\n                         TOTAL:                 10,710.00",
+    entities:{Vendor:"Singh Technologies Ltd.",Client:"Carlos Garcia","Invoice Number":"INV-240601","Invoice Date":"01 June 2026","Due Date":"01 July 2026","Total Amount":"10,710.00"},
+  },
+};
+
+const KEY_MAP = {trad:'Traditional ML', trans:'Transformer-Based', llm:'LLM-Assisted'};
+const COLORS  = {'Traditional ML':'#2660f4','Transformer-Based':'#16a34a','LLM-Assisted':'#d97706'};
+
+function showPage(id){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  event.target.classList.add('active');
+  if(id==='metrics') renderMetrics('trad');
+  if(id==='confusion') renderCM('trad');
+  if(id==='entities') renderEntities();
+}
+
+function switchTab(group, key){
+  document.querySelectorAll('#'+group+'-tabs .tab-btn').forEach((b,i)=>{
+    b.classList.toggle('active', ['trad','trans','llm'][i]===key);
+  });
+  if(group==='metrics') renderMetrics(key);
+  if(group==='cm') renderCM(key);
+}
+
+function renderMetrics(key){
+  const name = KEY_MAP[key];
+  const data = PER_CLASS[name];
+  const color = COLORS[name];
+  let html = '<div class="card"><div class="card-title">'+name+' — Per-Class Metrics</div>';
+  for(const metric of ['p','r','f1']){
+    const label = {p:'Precision',r:'Recall',f1:'F1-Score'}[metric];
+    html += '<div style="margin-bottom:20px"><div style="font-size:.78rem;font-weight:700;color:var(--ink-2);margin-bottom:10px">'+label+'</div>';
+    for(const cls of CLASSES){
+      const val = data[cls][metric];
+      const pct = (val*100).toFixed(1);
+      html += '<div class="bar-row"><span class="bar-label">'+cls+'</span><div class="bar-track"><div class="bar-fill" style="width:'+pct+'%;background:'+color+'"><span>'+pct+'%</span></div></div><span class="bar-val">'+pct+'%</span></div>';
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+  document.getElementById('metrics-content').innerHTML = html;
+}
+
+function renderCM(key){
+  const name = KEY_MAP[key];
+  const cm = CMs[name];
+  let html = '<div class="card"><div class="card-title">'+name+' — Confusion Matrix (n=40 per class)</div><div class="cm-wrap"><table class="cm-table"><tr><th class="cm-axis">True \\ Pred</th>';
+  for(const c of CLASSES) html += '<th>'+c.replace(' ','<br>')+'</th>';
+  html += '</tr>';
+  for(let i=0;i<CLASSES.length;i++){
+    html += '<tr><td class="cm-axis">'+CLASSES[i]+'</td>';
+    for(let j=0;j<CLASSES.length;j++){
+      const v = cm[i][j];
+      const cls2 = i===j ? 'cm-diag' : v>0 ? 'cm-err' : 'cm-zero';
+      html += '<td class="'+cls2+'">'+v+'</td>';
+    }
+    html += '</tr>';
+  }
+  html += '</table></div></div>';
+  document.getElementById('cm-content').innerHTML = html;
+}
+
+function renderEntities(){
+  ['trans','llm'].forEach(k => {
+    const data = k==='trans' ? ENT_TRANS : ENT_LLM;
+    const color = k==='trans' ? '#16a34a' : '#d97706';
+    let html = '';
+    for(const [ent, val] of Object.entries(data)){
+      const pct = (val*100).toFixed(0);
+      html += '<div class="bar-row"><span class="bar-label" style="width:130px">'+ent+'</span><div class="bar-track"><div class="bar-fill" style="width:'+pct+'%;background:'+color+'"><span>'+pct+'%</span></div></div><span class="bar-val">'+pct+'%</span></div>';
+    }
+    document.getElementById('ent-'+k+'-bars').innerHTML = html;
+  });
+}
+
+let selectedDoc = null;
+
+function initDemo(){
+  const grid = document.getElementById('doc-buttons');
+  let html = '';
+  for(const [name, d] of Object.entries(DOCS)){
+    html += '<button class="doc-btn" onclick="selectDoc(\''+name+'\')"><div class="doc-icon">'+d.icon+'</div><div class="doc-name">'+name+'</div></button>';
+  }
+  grid.innerHTML = html;
+}
+
+function selectDoc(name){
+  selectedDoc = name;
+  document.querySelectorAll('.doc-btn').forEach(b=>{
+    b.classList.toggle('sel', b.querySelector('.doc-name').textContent===name);
+  });
+  document.getElementById('doc-preview').textContent = DOCS[name].text;
+  document.getElementById('class-results').innerHTML = '<div style="color:var(--ink-3);font-size:.82rem;">Press Run to classify.</div>';
+  document.getElementById('entity-results').innerHTML = '<div style="color:var(--ink-3);font-size:.82rem;">Entities will appear here.</div>';
+}
+
+async function runDemo(){
+  if(!selectedDoc){ alert('Select a document first'); return; }
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Processing...';
+  const text = DOCS[selectedDoc].text;
+  try {
+    const response = await fetch('http://localhost:8000/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text })
+    });
+    const result = await response.json();
+    const approaches = [
+      { name:'Traditional ML',    key:'traditional_ml',    color:'#2660f4', time:'0.15ms' },
+      { name:'Transformer-Based', key:'transformer_based', color:'#16a34a', time:'0.001ms' },
+      { name:'LLM-Assisted',      key:'llm_assisted',      color:'#d97706', time:'0.48ms' },
+    ];
+    let classHtml = '';
+    for(const {name, key, color, time} of approaches){
+      const a = result.all_approaches[key];
+      if(!a) continue;
+      const correct = a.label === selectedDoc;
+      const conf = a.confidence;
+      const confCls = conf > 0.9 ? 'conf-high' : conf > 0.75 ? 'conf-mid' : 'conf-low';
+      classHtml += '<div class="result-row"><span class="result-approach">'+name+'</span><span class="result-pred" style="color:'+color+'">'+a.label+'</span><span class="result-conf '+confCls+'">'+(conf*100).toFixed(1)+'%</span><span style="font-size:.7rem;color:var(--ink-3)">'+time+'</span><span style="font-size:1rem">'+(correct?'✅':'❌')+'</span></div>';
+    }
+    classHtml += '<div style="font-size:.74rem;color:var(--ink-3);margin-top:10px">True label: <strong>'+selectedDoc+'</strong></div>';
+    document.getElementById('class-results').innerHTML = classHtml;
+
+    const entities = result.entities;
+    const gt = DOCS[selectedDoc].entities;
+    let entHtml = '<div style="margin-bottom:10px"><div style="font-size:.76rem;font-weight:700;color:var(--ink-3);margin-bottom:6px">EXTRACTED</div>';
+    if(Object.keys(entities).length === 0){
+      entHtml += '<span style="font-size:.78rem;color:var(--ink-3)">No entities extracted.</span>';
+    } else {
+      for(const [k,v] of Object.entries(entities)){
+        entHtml += '<span class="entity-tag"><span class="entity-key">'+k+'</span><span class="entity-val">'+v+'</span></span>';
+      }
+    }
+    entHtml += '</div><div style="font-size:.76rem;font-weight:700;color:var(--ink-3);margin:10px 0 6px">GROUND TRUTH</div>';
+    for(const [k,v] of Object.entries(gt)){
+      entHtml += '<span class="entity-tag"><span class="entity-key" style="color:#16a34a">'+k+'</span><span class="entity-val">'+v+'</span></span>';
+    }
+    document.getElementById('entity-results').innerHTML = entHtml;
+
+  } catch(err) {
+    document.getElementById('class-results').innerHTML = '<div style="color:red;font-size:.82rem;">Could not connect to API. Make sure the server is running on port 8000.<br><small>'+err.message+'</small></div>';
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<span>▶ Run All Pipelines</span>';
+}
+
+initDemo();
+renderEntities();
+</script>
+</body>
+</html>
