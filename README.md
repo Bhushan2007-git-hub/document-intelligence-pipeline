@@ -71,17 +71,17 @@ For the **Live Demo** tab to work (real ML classification), start the API first 
 
 ## Approaches
 
-### ① Traditional ML — `TraditionalMLPipeline`
+### Traditional ML — `TraditionalMLPipeline`
 - TF-IDF (bigrams, 20k features, sublinear TF) + Logistic Regression
 - Train: ~0.3s · Infer: ~0.15ms/sample · RAM: 45 MB
 - Best for: high-volume pipelines, resource-constrained environments
 
-### ② Transformer-Based — `TransformerPipeline`
+### Transformer-Based — `TransformerPipeline`
 - Dual-channel TF-IDF (char 2–4grams + word 1–3grams) → LSA (256d) → L2-norm → LogReg head
 - Train: ~13s · Infer: ~0.001ms/sample · RAM: 890 MB
 - Best for: maximum accuracy, noisy/multilingual documents, NER extraction
 
-### ③ LLM-Assisted — `LLMAssistedPipeline`
+### LLM-Assisted — `LLMAssistedPipeline`
 - Per-class keyword scoring + regex pattern matching (zero training)
 - Train: 0s · Infer: ~0.5ms/sample · RAM: 28 MB
 - Best for: rapid prototyping, new document types, interpretable decisions
